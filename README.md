@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🎵 ryxu-xo-utoplay
+# 🎵 ryxu-xo-autoplay
 
 ![Logo](assets/image.png)
 
