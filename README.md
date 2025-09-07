@@ -2,7 +2,7 @@
 
 # 🎵 ryxu-xo-autoplay
 
-![Logo](assets/image.png)
+<img src="assets/image.png" alt="Logo" width="120"/>
 
 **The Ultimate Autoplay API for Lavalink Clients**
 
