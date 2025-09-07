@@ -95,11 +95,18 @@ eura.on('trackEnd', async (player, track, reason) => {
 
 ```typescript
 interface AutoplayOptions {
-  enabled: boolean;                    // Enable/disable autoplay
+  // Core Settings
+  enabled: boolean;                    // Enable/disable autoplay (default: true)
   maxQueueSize: number;               // Max tracks to queue (default: 10)
-  platforms: Platform[];              // Supported platforms
+  platforms: Platform[];              // Supported platforms (default: ['youtube'])
   similarityThreshold: number;        // Similarity threshold 0-1 (default: 0.7)
+  
+  // Recommendation Settings
   preferSameGenre: boolean;           // Prefer same genre (default: true)
+  preferSameArtist: boolean;          // Prefer same artist (default: false)
+  maxRecommendationsPerProvider: number; // Max recs per provider (default: 5)
+  
+  // Provider Configuration
   customProviders?: AutoplayProvider[]; // Custom providers
   smartProviderSelection?: {          // Platform-specific autoplay
     youtube: Platform[];
@@ -107,6 +114,48 @@ interface AutoplayOptions {
     soundcloud: Platform[];
     default: Platform[];
   };
+  
+  // Provider Credentials
+  credentials?: {
+    spotify?: {
+      clientId: string;
+      clientSecret: string;
+    };
+    soundcloud?: {
+      clientId: string;
+    };
+  };
+  
+  // Advanced Settings
+  cacheEnabled: boolean;              // Enable caching (default: true)
+  cacheExpiry: number;                // Cache expiry in ms (default: 300000)
+  retryAttempts: number;              // API retry attempts (default: 3)
+  retryDelay: number;                 // Retry delay in ms (default: 1000)
+  
+  // Event Handlers
+  onTrackStarted?: (track: Track) => void;
+  onTrackEnded?: (track: Track) => void;
+  onQueueUpdated?: (queue: Track[]) => void;
+  onError?: (error: Error) => void;
+  onAutoplayStarted?: () => void;
+  onAutoplayStopped?: () => void;
+}
+```
+
+### Platform Types
+
+```typescript
+type Platform = 'youtube' | 'spotify' | 'soundcloud' | string;
+
+interface AutoplayProvider {
+  name: string;
+  priority: number;
+  canHandle(track: Track): boolean;
+  getSimilarTracks(track: Track, options: AutoplayOptions): Promise<Track[]>;
+  search(query: string, limit?: number): Promise<Track[]>;
+  getTrackInfo(track: Track): Promise<TrackMetadata | null>;
+  extractId(url: string): string | null;
+  buildUrl(id: string): string;
 }
 ```
 
@@ -177,18 +226,114 @@ autoplay.updateOptions(options: Partial<AutoplayOptions>): void
 #### Events
 
 ```typescript
-// Listen to autoplay events
+// Track Events
 autoplay.on('track_started', (event) => {
   console.log('Now playing:', event.data.track.info.title);
+  console.log('Artist:', event.data.track.info.author);
+  console.log('Platform:', event.data.track.info.sourceName);
 });
 
+autoplay.on('track_ended', (event) => {
+  console.log('Finished playing:', event.data.track.info.title);
+  console.log('Duration played:', event.data.duration);
+});
+
+// Queue Events
 autoplay.on('queue_updated', (event) => {
   console.log('Queue updated:', event.data.totalTracks, 'tracks');
+  console.log('Queue length:', event.data.queue.length);
+  console.log('Added tracks:', event.data.addedTracks?.length || 0);
 });
 
+autoplay.on('queue_cleared', (event) => {
+  console.log('Queue cleared');
+});
+
+// Autoplay Session Events
+autoplay.on('autoplay_started', (event) => {
+  console.log('Autoplay session started');
+  console.log('Initial track:', event.data.track.info.title);
+});
+
+autoplay.on('autoplay_stopped', (event) => {
+  console.log('Autoplay session stopped');
+  console.log('Reason:', event.data.reason);
+});
+
+// Recommendation Events
+autoplay.on('recommendations_found', (event) => {
+  console.log('Found recommendations:', event.data.count, 'tracks');
+  console.log('Provider:', event.data.provider);
+});
+
+autoplay.on('recommendations_failed', (event) => {
+  console.log('Recommendations failed for provider:', event.data.provider);
+  console.log('Error:', event.data.error.message);
+});
+
+// Error Events
 autoplay.on('error', (event) => {
   console.error('Autoplay error:', event.data.error);
+  console.error('Error type:', event.data.type);
+  console.error('Provider:', event.data.provider);
 });
+
+// Provider Events
+autoplay.on('provider_initialized', (event) => {
+  console.log('Provider initialized:', event.data.provider);
+});
+
+autoplay.on('provider_error', (event) => {
+  console.error('Provider error:', event.data.provider, event.data.error);
+});
+```
+
+#### Event Types
+
+```typescript
+interface AutoplayEvents {
+  // Track Events
+  'track_started': { track: Track; timestamp: number };
+  'track_ended': { track: Track; duration: number; timestamp: number };
+  
+  // Queue Events
+  'queue_updated': { 
+    queue: Track[]; 
+    totalTracks: number; 
+    addedTracks?: Track[]; 
+    removedTracks?: Track[] 
+  };
+  'queue_cleared': { timestamp: number };
+  
+  // Autoplay Session Events
+  'autoplay_started': { track: Track; timestamp: number };
+  'autoplay_stopped': { reason: string; timestamp: number };
+  
+  // Recommendation Events
+  'recommendations_found': { 
+    provider: string; 
+    count: number; 
+    tracks: Track[]; 
+    timestamp: number 
+  };
+  'recommendations_failed': { 
+    provider: string; 
+    error: Error; 
+    timestamp: number 
+  };
+  
+  // Error Events
+  'error': { 
+    error: Error; 
+    type: string; 
+    provider?: string; 
+    timestamp: number 
+  };
+  
+  // Provider Events
+  'provider_initialized': { provider: string; timestamp: number };
+  'provider_error': { provider: string; error: Error; timestamp: number };
+}
 ```
 
 ### Platform Providers
@@ -198,27 +343,231 @@ autoplay.on('error', (event) => {
 ```typescript
 import { YouTubeProvider } from 'ryxu-xo-autoplay';
 
+// Basic usage
 const youtube = new YouTubeProvider();
 const tracks = await youtube.getSimilarTracks(track, options);
+
+// With custom configuration
+const youtube = new YouTubeProvider({
+  maxResults: 50,
+  regionCode: 'US',
+  language: 'en',
+  safeSearch: 'moderate'
+});
 ```
+
+**Features:**
+- ✅ No API key required
+- ✅ Genre detection from descriptions
+- ✅ Smart search queries
+- ✅ Duplicate filtering
+- ✅ Similarity matching
 
 #### Spotify Provider
 
 ```typescript
 import { SpotifyProvider } from 'ryxu-xo-autoplay';
 
+// Basic usage
 const spotify = new SpotifyProvider('client_id', 'client_secret');
 await spotify.initialize();
 const tracks = await spotify.getSimilarTracks(track, options);
+
+// With custom configuration
+const spotify = new SpotifyProvider('client_id', 'client_secret', {
+  market: 'US',
+  limit: 20,
+  retryAttempts: 3,
+  timeout: 10000
+});
 ```
+
+**Features:**
+- ✅ Official Spotify API integration
+- ✅ Track + Artist seed recommendations
+- ✅ Genre-based fallback
+- ✅ Multiple search strategies
+- ✅ 404 error prevention
 
 #### SoundCloud Provider
 
 ```typescript
 import { SoundCloudProvider } from 'ryxu-xo-autoplay';
 
+// Basic usage
 const soundcloud = new SoundCloudProvider('client_id');
 const tracks = await soundcloud.getSimilarTracks(track, options);
+
+// With custom configuration
+const soundcloud = new SoundCloudProvider('client_id', {
+  limit: 20,
+  offset: 0,
+  tags: true,
+  genres: true
+});
+```
+
+**Features:**
+- ✅ SoundCloud API integration
+- ✅ Tag-based recommendations
+- ✅ Genre detection
+- ✅ Hashtag support
+- ✅ Artist-based searches
+
+### Provider Configuration
+
+#### Global Provider Settings
+
+```typescript
+const autoplay = createAutoplayManager({
+  platforms: ['youtube', 'spotify', 'soundcloud'],
+  
+  // Provider-specific settings
+  providerSettings: {
+    youtube: {
+      maxResults: 50,
+      regionCode: 'US',
+      language: 'en',
+      safeSearch: 'moderate'
+    },
+    spotify: {
+      market: 'US',
+      limit: 20,
+      retryAttempts: 3,
+      timeout: 10000
+    },
+    soundcloud: {
+      limit: 20,
+      offset: 0,
+      tags: true,
+      genres: true
+    }
+  }
+});
+```
+
+#### Custom Provider Implementation
+
+```typescript
+import { BaseProvider, Track, AutoplayOptions, TrackMetadata } from 'ryxu-xo-autoplay';
+
+class MyCustomProvider extends BaseProvider {
+  public name = 'myplatform';
+  public priority = 5;
+  
+  constructor(private apiKey: string, private options: any = {}) {
+    super();
+  }
+
+  async getSimilarTracks(track: Track, options: AutoplayOptions): Promise<Track[]> {
+    try {
+      // Get track metadata
+      const trackInfo = await this.getTrackInfo(track);
+      if (!trackInfo) return [];
+
+      // Search for similar tracks
+      const searchQueries = this.generateSearchQueries(trackInfo);
+      const allTracks: Track[] = [];
+
+      for (const query of searchQueries) {
+        const results = await this.search(query, options.maxRecommendationsPerProvider);
+        allTracks.push(...results);
+      }
+
+      // Remove duplicates and filter by similarity
+      const uniqueTracks = this.removeDuplicates(allTracks);
+      const similarTracks = this.filterBySimilarity(uniqueTracks, trackInfo, options.similarityThreshold);
+
+      return similarTracks.slice(0, options.maxRecommendationsPerProvider);
+    } catch (error) {
+      console.error('Custom provider error:', error);
+      return [];
+    }
+  }
+
+  async search(query: string, limit = 10): Promise<Track[]> {
+    // Implement your search logic
+    const results = await this.apiClient.search(query, { limit });
+    return this.convertToTracks(results);
+  }
+
+  async getTrackInfo(track: Track): Promise<TrackMetadata | null> {
+    // Implement track info retrieval
+    const trackData = await this.apiClient.getTrack(track.info.identifier);
+    return this.convertToMetadata(trackData);
+  }
+
+  canHandle(track: Track): boolean {
+    return track.info.sourceName === 'myplatform';
+  }
+
+  extractId(url: string): string | null {
+    const match = url.match(/myplatform\.com\/track\/([a-zA-Z0-9]+)/);
+    return match ? match[1] : null;
+  }
+
+  buildUrl(id: string): string {
+    return `https://myplatform.com/track/${id}`;
+  }
+
+  private generateSearchQueries(trackInfo: TrackMetadata): string[] {
+    const queries: string[] = [];
+    
+    if (trackInfo.genre) {
+      queries.push(`${trackInfo.genre} music`);
+      queries.push(`${trackInfo.genre} songs`);
+    }
+    
+    if (trackInfo.artist) {
+      queries.push(`${trackInfo.artist} music`);
+      queries.push(`${trackInfo.artist} songs`);
+    }
+    
+    if (trackInfo.title) {
+      queries.push(`songs like ${trackInfo.title}`);
+    }
+    
+    return queries;
+  }
+
+  private convertToTracks(results: any[]): Track[] {
+    return results.map(item => ({
+      track: '',
+      info: {
+        identifier: item.id,
+        isSeekable: true,
+        author: item.artist,
+        length: item.duration,
+        isStream: false,
+        position: 0,
+        title: item.title,
+        uri: item.url,
+        sourceName: 'myplatform'
+      }
+    }));
+  }
+
+  private convertToMetadata(trackData: any): TrackMetadata {
+    return {
+      title: trackData.title,
+      artist: trackData.artist,
+      duration: trackData.duration,
+      url: trackData.url,
+      thumbnail: trackData.thumbnail,
+      platform: 'myplatform',
+      id: trackData.id,
+      album: trackData.album,
+      year: trackData.year,
+      genre: trackData.genre
+    };
+  }
+}
+
+// Register custom provider
+const autoplay = createAutoplayManager({
+  platforms: ['youtube', 'myplatform'],
+  customProviders: [new MyCustomProvider('your_api_key')]
+});
 ```
 
 ## 🔧 Advanced Usage
@@ -249,19 +598,118 @@ const autoplay = createAutoplayManager({
 });
 ```
 
-### Enhanced Configuration
+### Configuration Examples
+
+#### Basic Configuration
 
 ```typescript
 const autoplay = createAutoplayManager({
   enabled: true,
+  maxQueueSize: 10,
+  platforms: ['youtube'],
+  similarityThreshold: 0.7
+});
+```
+
+#### Advanced Configuration
+
+```typescript
+const autoplay = createAutoplayManager({
+  // Core Settings
+  enabled: true,
   maxQueueSize: 25,
-  similarityThreshold: 0.8,
   platforms: ['youtube', 'spotify', 'soundcloud'],
+  similarityThreshold: 0.8,
+  
+  // Recommendation Settings
+  preferSameGenre: true,
+  preferSameArtist: false,
+  maxRecommendationsPerProvider: 8,
+  
+  // Platform-Specific Autoplay
   smartProviderSelection: {
     youtube: ['youtube'],           // YouTube tracks only get YouTube recs
     spotify: ['spotify'],           // Spotify tracks only get Spotify recs
     soundcloud: ['soundcloud'],     // SoundCloud tracks only get SoundCloud recs
     default: ['youtube', 'spotify'] // Fallback for unknown sources
+  },
+  
+  // Provider Credentials
+  credentials: {
+    spotify: {
+      clientId: process.env.SPOTIFY_CLIENT_ID,
+      clientSecret: process.env.SPOTIFY_CLIENT_SECRET
+    },
+    soundcloud: {
+      clientId: process.env.SOUNDCLOUD_CLIENT_ID
+    }
+  },
+  
+  // Advanced Settings
+  cacheEnabled: true,
+  cacheExpiry: 300000, // 5 minutes
+  retryAttempts: 3,
+  retryDelay: 1000,
+  
+  // Event Handlers
+  onTrackStarted: (track) => {
+    console.log(`🎵 Now playing: ${track.info.title} by ${track.info.author}`);
+  },
+  onTrackEnded: (track) => {
+    console.log(`✅ Finished: ${track.info.title}`);
+  },
+  onQueueUpdated: (queue) => {
+    console.log(`📋 Queue updated: ${queue.length} tracks`);
+  },
+  onError: (error) => {
+    console.error('❌ Autoplay error:', error.message);
+  },
+  onAutoplayStarted: () => {
+    console.log('▶️ Autoplay session started');
+  },
+  onAutoplayStopped: () => {
+    console.log('⏹️ Autoplay session stopped');
+  }
+});
+```
+
+#### Production Configuration
+
+```typescript
+const autoplay = createAutoplayManager({
+  enabled: true,
+  maxQueueSize: 50,
+  platforms: ['youtube', 'spotify', 'soundcloud'],
+  similarityThreshold: 0.75,
+  preferSameGenre: true,
+  preferSameArtist: false,
+  maxRecommendationsPerProvider: 10,
+  
+  smartProviderSelection: {
+    youtube: ['youtube'],
+    spotify: ['spotify'],
+    soundcloud: ['soundcloud'],
+    default: ['youtube', 'spotify']
+  },
+  
+  credentials: {
+    spotify: {
+      clientId: process.env.SPOTIFY_CLIENT_ID,
+      clientSecret: process.env.SPOTIFY_CLIENT_SECRET
+    },
+    soundcloud: {
+      clientId: process.env.SOUNDCLOUD_CLIENT_ID
+    }
+  },
+  
+  cacheEnabled: true,
+  cacheExpiry: 600000, // 10 minutes
+  retryAttempts: 5,
+  retryDelay: 2000,
+  
+  onError: (error) => {
+    // Log to your logging service
+    logger.error('Autoplay error', { error: error.message, stack: error.stack });
   }
 });
 ```
@@ -400,7 +848,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 <div align="center">
 
 **Made with ❤️ by [ryxu-xo](https://github.com/ryxu-xo)**
-
-[Website](https://ryxu-xo.com) • [Documentation](https://docs.ryxu-xo.com) • [Discord](https://discord.gg/ryxu-xo)
 
 </div>
