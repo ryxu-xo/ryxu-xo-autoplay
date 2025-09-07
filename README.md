@@ -823,26 +823,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - 💬 [Discord Community](https://discord.gg/your-discord)
 - 📧 [Email Support](mailto:support@ryxu-xo.com)
 
-## 🎉 Changelog
-
-### v1.2.0 - Latest
-- ✨ **Genre-based autoplay** - Smart recommendations based on music genre
-- 🎯 **Platform-specific autoplay** - Spotify tracks get Spotify recs, etc.
-- 🛡️ **404 error prevention** - Robust fallback strategies
-- ⚡ **Performance optimizations** - Reduced logging and CPU usage
-- 🔄 **True autoplay behavior** - Continuous music discovery
-
-### v1.1.0
-- 🎵 **Multi-platform support** - YouTube, Spotify, SoundCloud
-- 🧠 **Intelligent recommendations** - AI-powered similarity matching
-- 📊 **Queue management** - Advanced queue handling with history
-- ⚡ **Event-driven architecture** - Real-time events and callbacks
-
-### v1.0.0
-- 🚀 **Initial release** - Core autoplay functionality
-- 📱 **TypeScript support** - Full type definitions
-- 🔧 **Custom providers** - Extensible provider system
-
 ---
 
 <div align="center">
