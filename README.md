@@ -1,33 +1,64 @@
 # ryxu-xo-autoplay
 
-A powerful and flexible autoplay API for Lavalink client bots with advanced error handling, comprehensive event system, and support for multiple music platforms.
+A high-performance autoplay API for Lavalink client bots with source-to-source continuity, optimized for low CPU/RAM usage and fast response times.
 
 ## Features
 
 - 🎵 **Multi-Platform Support**: YouTube, Spotify, and SoundCloud
-- 🔄 **Smart Autoplay**: Intelligent track selection based on current playing track
+- 🔄 **Source-to-Source Autoplay**: Spotify → Spotify, YouTube → YouTube, SoundCloud → SoundCloud
+- ⚡ **High Performance**: Optimized for speed with reduced timeouts and memory usage
 - 📡 **Event System**: Comprehensive event handling for better bot integration
 - 🛡️ **Error Handling**: Robust error handling with retry mechanisms and rate limiting
-- ⚡ **Performance**: Optimized HTTP requests with connection pooling
 - 🔧 **TypeScript**: Full TypeScript support with comprehensive type definitions
 - 🧪 **Tested**: Extensive test coverage for reliability
+- 🚀 **Euralink Integration**: Seamless integration with Euralink Lavalink client
 
 ## Installation
+
+### Production Installation
 
 ```bash
 npm install ryxu-xo-autoplay
 ```
+
+### Development Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/ryxu-xo/ryxu-xo-autoplay.git
+cd ryxu-xo-autoplay
+
+# Install dependencies
+npm install
+
+# Build the project
+npm run build
+
+# Run tests
+npm test
+
+# Watch mode for development
+npm run dev
+```
+
+### Development Scripts
+
+- `npm run build` - Build TypeScript to JavaScript
+- `npm run dev` - Build in watch mode
+- `npm test` - Run test suite
+- `npm run test:watch` - Run tests in watch mode
 
 ## Quick Start
 
 ```typescript
 import { LavalinkAutoplay } from 'ryxu-xo-autoplay';
 
-// Create autoplay instance
+// Create autoplay instance with optimized settings
 const autoplay = new LavalinkAutoplay({
   enableEvents: true,
-  timeout: 10000,
-  maxRetries: 3
+  timeout: 5000,      // Reduced for faster performance
+  maxRetries: 1,      // Reduced for faster performance
+  rateLimitDelay: 500 // Reduced for faster performance
 });
 
 // Get next track for autoplay
@@ -59,10 +90,10 @@ if (result.success) {
 
 ```typescript
 const autoplay = new LavalinkAutoplay({
-  maxRetries: 3,           // Maximum retry attempts
-  timeout: 10000,          // Request timeout in milliseconds
+  maxRetries: 1,           // Maximum retry attempts (optimized)
+  timeout: 5000,           // Request timeout in milliseconds (optimized)
   enableEvents: true,      // Enable event system
-  rateLimitDelay: 1000,    // Rate limiting delay
+  rateLimitDelay: 500,     // Rate limiting delay (optimized)
   userAgent: 'MyBot/1.0',  // Custom user agent
   customHeaders: {         // Additional headers
     'X-Custom': 'value'
@@ -76,17 +107,33 @@ const autoplay = new LavalinkAutoplay({
 const autoplay = new LavalinkAutoplay({}, {
   spotify: {
     totpSecret: 'your-secret-key',
-    maxRecommendations: 20
+    maxRecommendations: 5  // Optimized for faster processing
   },
   soundcloud: {
-    maxTracks: 50,
+    maxTracks: 20,         // Optimized for faster processing
     baseUrl: 'https://soundcloud.com'
   },
   youtube: {
-    enableRadioMode: true
+    enableRadioMode: false // Uses Euralink search for better results
   }
 });
 ```
+
+## Source-to-Source Autoplay
+
+The package automatically maintains source continuity for seamless music experience:
+
+- **Spotify → Spotify**: When a Spotify track ends, finds another Spotify track
+- **YouTube → YouTube**: When a YouTube track ends, finds another YouTube track  
+- **SoundCloud → SoundCloud**: When a SoundCloud track ends, finds another SoundCloud track
+
+### How It Works
+
+1. **Source Detection**: Analyzes current track's source and URL
+2. **Smart Mapping**: Maps different naming conventions (spsearch → spotify, ytmsearch → youtube)
+3. **Provider Selection**: Uses appropriate provider for the detected source
+4. **Fallback System**: Falls back to YouTube if original source fails
+5. **Seamless Playback**: Maintains music flow without interruption
 
 ## Event System
 
@@ -219,34 +266,78 @@ interface AutoplayConfig {
 }
 ```
 
+## Euralink Integration
+
+This package is designed to work seamlessly with Euralink. Here's a complete integration example:
+
+```javascript
+const { Euralink } = require('ryxu-xo-euralink');
+const { LavalinkAutoplay } = require('ryxu-xo-autoplay');
+
+// Initialize Euralink
+const eura = new Euralink(client, [/* nodes */], { /* options */ });
+
+// Make Euralink globally available for autoplay providers
+global.eura = eura;
+
+// Initialize autoplay with optimized settings
+const autoplay = new LavalinkAutoplay({
+  timeout: 5000,
+  maxRetries: 1,
+  rateLimitDelay: 500
+});
+
+// Handle track end events
+eura.on('trackEnd', async (player, track, reason) => {
+  if (player.autoplayEnabled) {
+    const autoplayResult = await autoplay.getNextTrack(track.info);
+    
+    if (autoplayResult.success) {
+      const result = await eura.resolve({ 
+        query: autoplayResult.url, 
+        requester: { id: 'autoplay', username: 'Autoplay' }
+      });
+      
+      if (result.tracks.length > 0) {
+        player.queue.add(result.tracks[0]);
+        await player.play();
+      }
+    }
+  }
+});
+```
+
 ## Providers
 
 ### YouTube Provider
 
-Automatically creates radio mode URLs for continuous playback:
+Uses Euralink search for intelligent track selection:
 
 ```typescript
-// Input: https://youtube.com/watch?v=dQw4w9WgXcQ
-// Output: https://youtube.com/watch?v=dQw4w9WgXcQ&list=RDdQw4w9WgXcQ
+// Searches for similar content using artist + title
+// Returns actual YouTube tracks instead of radio URLs
+// Much more reliable than radio mode
 ```
 
 ### Spotify Provider
 
-Uses Spotify's recommendations API to find similar tracks:
+Uses Euralink with Spotify recommendations for source-to-source autoplay:
 
 ```typescript
-// Requires valid Spotify track ID
-// Uses TOTP authentication for API access
-// Returns Spotify track URLs
+// Integrates with Euralink for Spotify track resolution
+// Uses mix:track: queries for better recommendations
+// Returns actual Spotify tracks with full metadata
+// Maintains source continuity (Spotify → Spotify)
 ```
 
 ### SoundCloud Provider
 
-Fetches recommended tracks from SoundCloud:
+Uses optimized scraping for SoundCloud recommendations:
 
 ```typescript
-// Scrapes SoundCloud's recommended page
-// Returns random track from recommendations
+// Fast HTTP requests with connection pooling
+// Reduced memory usage with smaller response limits
+// Shuffled results for variety
 // Supports custom base URL configuration
 ```
 
@@ -317,13 +408,34 @@ autoplay.getEventEmitter().onEvent('error', (data) => {
 });
 ```
 
-## Performance Tips
+## Performance Optimizations
+
+This package is optimized for high performance and low resource usage:
+
+### Built-in Optimizations
+
+- **Reduced Timeouts**: 5s default timeout (vs 10s standard)
+- **Minimal Retries**: 1 retry attempt (vs 3 standard)
+- **Fast Rate Limiting**: 500ms delay (vs 1s standard)
+- **Connection Pooling**: Reuses HTTP connections for faster requests
+- **Memory Efficient**: Reduced buffer sizes and response limits
+- **Smart Caching**: Efficient provider selection and source mapping
+
+### Performance Tips
 
 1. **Reuse Instances**: Create one autoplay instance and reuse it
-2. **Event Filtering**: Only listen to events you need
+2. **Event Filtering**: Only listen to events you need (debug logs removed)
 3. **Rate Limiting**: Respect rate limits to avoid blocking
-4. **Timeout Configuration**: Adjust timeouts based on your needs
-5. **Provider Selection**: Use the most appropriate provider for each source
+4. **Provider Selection**: Use the most appropriate provider for each source
+5. **Euralink Integration**: Use global Euralink instance for better performance
+6. **Source-to-Source**: Maintains continuity for better user experience
+
+### Resource Usage
+
+- **CPU**: Optimized algorithms and reduced processing
+- **RAM**: Lower memory footprint with smaller buffers
+- **Network**: Connection pooling and reduced timeouts
+- **Disk**: No persistent storage, all in-memory operations
 
 ## Troubleshooting
 
