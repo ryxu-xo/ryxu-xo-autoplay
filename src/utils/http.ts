@@ -7,9 +7,9 @@ import { RequestOptions } from '../types';
 export const createHttpAgent = (): https.Agent => {
   return new https.Agent({
     keepAlive: true,
-    timeout: 8000,
-    maxSockets: 5,
-    maxFreeSockets: 2
+    timeout: 5000, // Reduced for faster performance
+    maxSockets: 3, // Reduced for lower memory usage
+    maxFreeSockets: 1 // Reduced for lower memory usage
   });
 };
 
@@ -55,8 +55,8 @@ export async function fetchPage(
         res.resume();
         const error = new Error(`Request failed with status: ${res.statusCode}`);
         
-        if (attempt < (options.retries || 2)) {
-          const delay = 200 * (attempt + 1);
+        if (attempt < (options.retries || 1)) { // Reduced retries
+          const delay = 100 * (attempt + 1); // Reduced delay
           setTimeout(() => {
             fetchPage(url, options, attempt + 1)
               .then(resolve)

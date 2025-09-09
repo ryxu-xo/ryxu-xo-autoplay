@@ -20,7 +20,7 @@ export abstract class BaseProvider implements AutoplayProvider {
   /**
    * Get the next track for autoplay
    */
-  public abstract getNextTrack(trackInfo: LavalinkTrackInfo): Promise<AutoplayResult>;
+  public abstract getNextTrack(trackInfo: LavalinkTrackInfo, excludeIds?: Set<string>): Promise<AutoplayResult>;
 
   /**
    * Validate track info before processing

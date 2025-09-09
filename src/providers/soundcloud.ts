@@ -1,20 +1,19 @@
 import { BaseProvider } from './base';
 import { LavalinkTrackInfo, AutoplayResult, AutoplaySource, ProviderConfig } from '../types';
 import { AutoplayEventEmitter } from '../events';
-import { fetchPage } from '../utils/http';
+import { scAutoPlay } from '../utils/autoplay-apis';
 
 /**
- * SoundCloud autoplay provider
+ * SoundCloud autoplay provider using improved API
  */
 export class SoundCloudProvider extends BaseProvider {
   public readonly name: AutoplaySource = 'soundcloud';
   private readonly maxTracks: number;
   private readonly baseUrl: string;
-  private readonly scLinkPattern = /<a\s+itemprop="url"\s+href="(\/[^"]+)"/g;
 
   constructor(eventEmitter: AutoplayEventEmitter, config: ProviderConfig['soundcloud'] = {}) {
     super(eventEmitter);
-    this.maxTracks = config.maxTracks || 40;
+    this.maxTracks = config.maxTracks || 50;
     this.baseUrl = config.baseUrl || 'https://soundcloud.com';
   }
 
@@ -26,9 +25,9 @@ export class SoundCloudProvider extends BaseProvider {
   }
 
   /**
-   * Get next SoundCloud track using recommended tracks
+   * Get next SoundCloud track using improved API
    */
-  public async getNextTrack(trackInfo: LavalinkTrackInfo): Promise<AutoplayResult> {
+  public async getNextTrack(trackInfo: LavalinkTrackInfo, excludeIds: Set<string> = new Set()): Promise<AutoplayResult> {
     try {
       this.validateTrackInfo(trackInfo);
 
@@ -37,22 +36,21 @@ export class SoundCloudProvider extends BaseProvider {
       }
 
       const trackUrl = trackInfo.uri;
-      const recommendedUrl = this.createRecommendedUrl(trackUrl);
       
-      // Fetch recommended tracks
-      const recommendedTracks = await this.fetchRecommendedTracks(recommendedUrl);
+      // Use the improved SoundCloud autoplay logic
+      const autoplayTracks = await this.getSoundCloudAutoplayTracks(trackUrl, excludeIds);
       
-      if (!recommendedTracks.length) {
+      if (!autoplayTracks || autoplayTracks.length === 0) {
         this.eventEmitter.emitTrackNotFound({
           source: this.name,
           trackInfo,
           metadata: { originalUrl: trackUrl }
         });
         
-        return this.createErrorResult('No recommended tracks found');
+        return this.createErrorResult('No SoundCloud autoplay tracks found');
       }
 
-      const selectedTrack = this.selectRandomTrack(recommendedTracks);
+      const selectedTrack = autoplayTracks[0] || ''; // First track from shuffled results
 
       this.eventEmitter.emitTrackFound({
         source: this.name,
@@ -60,14 +58,14 @@ export class SoundCloudProvider extends BaseProvider {
         metadata: {
           originalUrl: trackUrl,
           selectedUrl: selectedTrack,
-          totalFound: recommendedTracks.length
+          totalFound: autoplayTracks.length
         }
       });
 
-      return this.createSuccessResult(selectedTrack, undefined, {
+      return this.createSuccessResult(selectedTrack, selectedTrack, {
         originalUrl: trackUrl,
         selectedUrl: selectedTrack,
-        totalFound: recommendedTracks.length
+        totalFound: autoplayTracks.length
       });
 
     } catch (error) {
@@ -75,6 +73,26 @@ export class SoundCloudProvider extends BaseProvider {
         error instanceof Error ? error : new Error('Unknown SoundCloud provider error'),
         trackInfo
       );
+    }
+  }
+
+  /**
+   * Get SoundCloud autoplay tracks using improved API
+   */
+  private async getSoundCloudAutoplayTracks(baseUrl: string, excludeIds: Set<string> = new Set()): Promise<string[]> {
+    try {
+      const tracks = await scAutoPlay(baseUrl);
+      
+      // Filter out tracks that are already in history
+      const filteredTracks = tracks.filter(trackUrl => {
+        const trackId = this.extractTrackId(trackUrl);
+        return trackId && !excludeIds.has(trackId);
+      });
+      
+      return filteredTracks;
+    } catch (err) {
+      console.error('SoundCloud autoplay error:', err instanceof Error ? err.message : err);
+      return [];
     }
   }
 
@@ -91,36 +109,18 @@ export class SoundCloudProvider extends BaseProvider {
     return `${this.baseUrl}${cleanPath}/recommended`;
   }
 
-  /**
-   * Fetch recommended tracks from SoundCloud
-   */
-  private async fetchRecommendedTracks(recommendedUrl: string): Promise<string[]> {
-    const html = await fetchPage(recommendedUrl);
-    const found: string[] = [];
-    let match;
-
-    while ((match = this.scLinkPattern.exec(html)) !== null) {
-      const trackPath = match[1];
-      const fullUrl = `${this.baseUrl}${trackPath}`;
-      found.push(fullUrl);
-      
-      if (found.length >= this.maxTracks) {
-        break;
-      }
-    }
-
-    return found;
-  }
 
   /**
-   * Select a random track from the list
+   * Extract track ID from SoundCloud URL
    */
-  private selectRandomTrack(tracks: string[]): string {
-    const track = tracks[Math.floor(Math.random() * tracks.length)];
-    if (!track) {
-      throw new Error('No tracks available for selection');
+  private extractTrackId(url: string): string | null {
+    try {
+      const urlObj = new URL(url);
+      const pathParts = urlObj.pathname.split('/');
+      return pathParts[pathParts.length - 1] || null;
+    } catch {
+      return null;
     }
-    return track;
   }
 
   /**

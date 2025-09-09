@@ -151,7 +151,7 @@ export type AutoplayEventListener = (data: AutoplayEventData) => void;
 export interface AutoplayProvider {
   readonly name: AutoplaySource;
   canHandle(trackInfo: LavalinkTrackInfo): boolean;
-  getNextTrack(trackInfo: LavalinkTrackInfo): Promise<AutoplayResult>;
+  getNextTrack(trackInfo: LavalinkTrackInfo, excludeIds?: Set<string>): Promise<AutoplayResult>;
 }
 
 /**

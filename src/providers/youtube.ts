@@ -20,9 +20,9 @@ export class YouTubeProvider extends BaseProvider {
   }
 
   /**
-   * Get next YouTube track using radio mode
+   * Get next YouTube track using Euralink search
    */
-  public async getNextTrack(trackInfo: LavalinkTrackInfo): Promise<AutoplayResult> {
+  public async getNextTrack(trackInfo: LavalinkTrackInfo, excludeIds: Set<string> = new Set()): Promise<AutoplayResult> {
     try {
       this.validateTrackInfo(trackInfo);
 
@@ -31,17 +31,40 @@ export class YouTubeProvider extends BaseProvider {
       }
 
       const videoId = trackInfo.identifier;
-      const radioUrl = this.createRadioUrl(videoId);
+      
+      // Use Euralink to search for similar content
+      const searchQuery = this.createSearchQuery(trackInfo);
+      const autoplayTracks = await this.getYouTubeAutoplayTracks(searchQuery, excludeIds);
+      
+      if (!autoplayTracks || autoplayTracks.length === 0) {
+        this.eventEmitter.emitTrackNotFound({
+          source: this.name,
+          trackInfo,
+          metadata: { videoId }
+        });
+        
+        return this.createErrorResult('No YouTube autoplay tracks found');
+      }
+
+      const selectedTrack = autoplayTracks[0];
+      const trackUrl = selectedTrack.info?.uri || selectedTrack.uri || `https://www.youtube.com/watch?v=${selectedTrack.identifier}`;
 
       this.eventEmitter.emitTrackFound({
         source: this.name,
         trackInfo,
-        metadata: { videoId, radioUrl }
+        metadata: { 
+          videoId, 
+          selectedVideoId: selectedTrack.identifier,
+          trackName: selectedTrack.info?.title || 'Unknown',
+          author: selectedTrack.info?.author || 'Unknown'
+        }
       });
 
-      return this.createSuccessResult(radioUrl, videoId, {
+      return this.createSuccessResult(trackUrl, selectedTrack.identifier, {
         originalVideoId: videoId,
-        radioMode: true
+        selectedVideoId: selectedTrack.identifier,
+        trackName: selectedTrack.info?.title,
+        author: selectedTrack.info?.author
       });
 
     } catch (error) {
@@ -53,10 +76,53 @@ export class YouTubeProvider extends BaseProvider {
   }
 
   /**
-   * Create YouTube radio URL for autoplay
+   * Create search query for YouTube autoplay
    */
-  private createRadioUrl(videoId: string): string {
-    return `https://www.youtube.com/watch?v=${videoId}&list=RD${videoId}`;
+  private createSearchQuery(trackInfo: LavalinkTrackInfo): string {
+    // Use artist and title for better search results
+    const artist = trackInfo.author || '';
+    const title = trackInfo.title || '';
+    
+    if (artist && title) {
+      return `${artist} ${title}`;
+    } else if (title) {
+      return title;
+    } else {
+      return `music`;
+    }
+  }
+
+  /**
+   * Get YouTube autoplay tracks using Euralink
+   */
+  private async getYouTubeAutoplayTracks(searchQuery: string, excludeIds: Set<string> = new Set()): Promise<any[]> {
+    try {
+      // Try to use the global Euralink instance if available
+      if (typeof global !== 'undefined' && (global as any).eura) {
+        const eura = (global as any).eura;
+        const result = await eura.resolve({ 
+          query: searchQuery, 
+          source: 'ytsearch',
+          requester: { id: 'autoplay', username: 'Autoplay' }
+        });
+        
+        if (result && result.tracks && result.tracks.length > 0) {
+          // Filter out tracks that are already in history
+          const filteredTracks = result.tracks.filter((track: any) => {
+            const trackId = track.identifier || track.info?.identifier;
+            return trackId && !excludeIds.has(trackId);
+          });
+          
+          // Return first 5 tracks for variety (increased from 3)
+          return filteredTracks.slice(0, 5);
+        }
+      }
+      
+      return [];
+    } catch (error) {
+      console.error('YouTube autoplay error:', error);
+      return [];
+    }
   }
 
   /**
