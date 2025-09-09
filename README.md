@@ -1,6 +1,8 @@
 # ryxu-xo-autoplay
 
-A high-performance autoplay API for Lavalink client bots with source-to-source continuity, optimized for low CPU/RAM usage and fast response times.
+A high-performance autoplay API for **any Lavalink client** with source-to-source continuity, optimized for low CPU/RAM usage and fast response times.
+
+> **Note**: Euralink has its own autoplay system - this package is just a test/alternative implementation that works with any Lavalink client.
 
 ## Features
 
@@ -11,7 +13,7 @@ A high-performance autoplay API for Lavalink client bots with source-to-source c
 - 🛡️ **Error Handling**: Robust error handling with retry mechanisms and rate limiting
 - 🔧 **TypeScript**: Full TypeScript support with comprehensive type definitions
 - 🧪 **Tested**: Extensive test coverage for reliability
-- 🚀 **Euralink Integration**: Seamless integration with Euralink Lavalink client
+- 🚀 **Universal Lavalink Support**: Works with any Lavalink client (Euralink, erela.js, etc.)
 
 ## Installation
 
@@ -266,9 +268,13 @@ interface AutoplayConfig {
 }
 ```
 
-## Euralink Integration
+## Lavalink Client Integration
 
-This package is designed to work seamlessly with Euralink. Here's a complete integration example:
+This package works with **any Lavalink client**. Here are integration examples for different clients:
+
+### Euralink Integration
+
+> **Note**: Euralink has its own autoplay system - this is just a test implementation.
 
 ```javascript
 const { Euralink } = require('ryxu-xo-euralink');
@@ -307,27 +313,107 @@ eura.on('trackEnd', async (player, track, reason) => {
 });
 ```
 
+### erela.js Integration
+
+```javascript
+const { Manager } = require('erela.js');
+const { LavalinkAutoplay } = require('ryxu-xo-autoplay');
+
+// Initialize erela.js
+const manager = new Manager({
+  nodes: [/* your nodes */],
+  send: (id, payload) => {
+    const guild = client.guilds.cache.get(id);
+    if (guild) guild.shard.send(payload);
+  }
+});
+
+// Initialize autoplay
+const autoplay = new LavalinkAutoplay({
+  timeout: 5000,
+  maxRetries: 1,
+  rateLimitDelay: 500
+});
+
+// Handle track end events
+manager.on('trackEnd', async (player, track, reason) => {
+  if (player.data.get('autoplayEnabled')) {
+    const autoplayResult = await autoplay.getNextTrack(track);
+    
+    if (autoplayResult.success) {
+      const result = await manager.search(autoplayResult.url, player.requestingUser);
+      
+      if (result.tracks.length > 0) {
+        player.queue.add(result.tracks[0]);
+        player.play();
+      }
+    }
+  }
+});
+```
+
+### Discord Player Integration
+
+```javascript
+const { Player } = require('discord-player');
+const { LavalinkAutoplay } = require('ryxu-xo-autoplay');
+
+// Initialize Discord Player
+const player = new Player(client, {
+  ytdlOptions: {
+    quality: 'highestaudio',
+    highWaterMark: 1 << 25
+  }
+});
+
+// Initialize autoplay
+const autoplay = new LavalinkAutoplay({
+  timeout: 5000,
+  maxRetries: 1,
+  rateLimitDelay: 500
+});
+
+// Handle track end events
+player.on('trackEnd', async (queue, track) => {
+  if (queue.metadata.get('autoplayEnabled')) {
+    const autoplayResult = await autoplay.getNextTrack(track);
+    
+    if (autoplayResult.success) {
+      const result = await player.search(autoplayResult.url, {
+        requestedBy: queue.metadata.get('requestedBy')
+      });
+      
+      if (result.tracks.length > 0) {
+        queue.addTrack(result.tracks[0]);
+      }
+    }
+  }
+});
+```
+
 ## Providers
 
 ### YouTube Provider
 
-Uses Euralink search for intelligent track selection:
+Uses Lavalink search for intelligent track selection:
 
 ```typescript
 // Searches for similar content using artist + title
 // Returns actual YouTube tracks instead of radio URLs
 // Much more reliable than radio mode
+// Works with any Lavalink client
 ```
 
 ### Spotify Provider
 
-Uses Euralink with Spotify recommendations for source-to-source autoplay:
+Uses Lavalink with Spotify recommendations for source-to-source autoplay:
 
 ```typescript
-// Integrates with Euralink for Spotify track resolution
+// Integrates with Lavalink for Spotify track resolution
 // Uses mix:track: queries for better recommendations
 // Returns actual Spotify tracks with full metadata
 // Maintains source continuity (Spotify → Spotify)
+// Works with any Lavalink client
 ```
 
 ### SoundCloud Provider
@@ -339,6 +425,7 @@ Uses optimized scraping for SoundCloud recommendations:
 // Reduced memory usage with smaller response limits
 // Shuffled results for variety
 // Supports custom base URL configuration
+// Works with any Lavalink client
 ```
 
 ## Error Handling
@@ -427,7 +514,7 @@ This package is optimized for high performance and low resource usage:
 2. **Event Filtering**: Only listen to events you need (debug logs removed)
 3. **Rate Limiting**: Respect rate limits to avoid blocking
 4. **Provider Selection**: Use the most appropriate provider for each source
-5. **Euralink Integration**: Use global Euralink instance for better performance
+5. **Lavalink Integration**: Use global Lavalink instance for better performance
 6. **Source-to-Source**: Maintains continuity for better user experience
 
 ### Resource Usage
